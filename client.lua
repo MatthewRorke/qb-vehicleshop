@@ -235,6 +235,9 @@ function createFreeUseShop(shopShape, name)
                             icon = "fa-solid fa-car-on",
                             params = {
                                 event = 'qb-vehicleshop:client:TestDrive',
+                                args = {
+                                    isLuxury = getShopInsideOf() == 'luxury'
+                                }
                             }
                         },
                         {
@@ -249,20 +252,18 @@ function createFreeUseShop(shopShape, name)
                                 }
                             }
                         },
+                        -- {
+                        --     header = 'Finance Vehicle',
+                        --     txt = 'Finance currently selected vehicle',
+                        --     params = {
+                        --         event = 'qb-vehicleshop:client:openFinance',
+                        --         args = {
+                        --             price = getVehPrice(),
+                        --             buyVehicle = Config.Shops[getShopInsideOf()]["ShowroomVehicles"][ClosestVehicle].chosenVehicle
+                        --         }
+                        --     }
+                        -- },
                         {
-                            header = 'Finance Vehicle',
-                            txt = 'Finance currently selected vehicle',
-                            icon = "fa-solid fa-coins",
-                            params = {
-                                event = 'qb-vehicleshop:client:openFinance',
-                                args = {
-                                    price = getVehPrice(),
-                                    buyVehicle = Config.Shops[getShopInsideOf()]["ShowroomVehicles"][ClosestVehicle].chosenVehicle
-                                }
-                            }
-                        },
-                        {
-                            icon = "fa-solid fa-arrow-rotate-left",
                             header = 'Swap Vehicle',
                             txt = 'Change currently selected vehicle',
                             params = {
@@ -298,7 +299,7 @@ function createManagedShop(shopShape, name)
                         {
                             isMenuHeader = true,
                             icon = "fa-solid fa-circle-info",
-                            header = getVehBrand():upper()..' '..getVehName():upper()..' - $'..getVehPrice(),
+                            header = getVehBrand():upper().. ' '..getVehName():upper().. ' - R' ..getVehPrice(),
                         },
                         {
                             header = 'Test Drive',
@@ -365,6 +366,18 @@ end
 
 -- Events
 
+RegisterNetEvent('qb-vehicleshop:client:transferVehicle', function(buyerId, amount)
+    local ped = PlayerPedId()
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    local plate = QBCore.Functions.GetPlate(vehicle)
+    local tcoords = GetEntityCoords(GetPlayerPed(GetPlayerFromServerId(buyerId)))
+    if #(GetEntityCoords(ped)-tcoords) < 5.0 then
+        TriggerServerEvent('qb-vehicleshop:server:transferVehicle', plate, buyerId, amount)
+    else
+        QBCore.Functions.Notify('The person you are selling to is too far away.')
+    end
+end)
+
 RegisterNetEvent('qb-vehicleshop:client:homeMenu', function()
     exports['qb-menu']:openMenu(vehicleMenu)
 end)
@@ -373,8 +386,13 @@ RegisterNetEvent('qb-vehicleshop:client:showVehOptions', function()
     exports['qb-menu']:openMenu(vehicleMenu)
 end)
 
-RegisterNetEvent('qb-vehicleshop:client:TestDrive', function()
+RegisterNetEvent('qb-vehicleshop:client:TestDrive', function(data)
     if not inTestDrive and ClosestVehicle ~= 0 then
+        local isLuxury = data.isLuxury
+        if isLuxury ~= nil and isLuxury == true then
+            QBCore.Functions.Notify('This car is too expensive to test drive. You would probably crash it.', 'error', 10000)
+            return
+        end
         inTestDrive = true
         local prevCoords = GetEntityCoords(PlayerPedId())
         QBCore.Functions.SpawnVehicle(Config.Shops[getShopInsideOf()]["ShowroomVehicles"][ClosestVehicle].chosenVehicle, function(veh)
@@ -491,7 +509,7 @@ RegisterNetEvent('qb-vehicleshop:client:openVehCats', function(data)
         if QBCore.Shared.Vehicles[k]["category"] == data.catName and QBCore.Shared.Vehicles[k]["shop"] == getShopInsideOf() then
             vehicleMenu[#vehicleMenu + 1] = {
                 header = v.name,
-                txt = 'Price: $'..v.price,
+                txt = 'Price: R'..v.price,
                 icon = "fa-solid fa-car-side",
                 params = {
                     isServer = true,
@@ -510,7 +528,7 @@ end)
 
 RegisterNetEvent('qb-vehicleshop:client:openFinance', function(data)
     local dialog = exports['qb-input']:ShowInput({
-        header = getVehBrand():upper()..' '..data.buyVehicle:upper()..' - $'..data.price,
+        header = getVehBrand():upper()..' '..data.buyVehicle:upper()..' - R'..data.price,
         submitText = "Submit",
         inputs = {
             {
@@ -536,7 +554,7 @@ end)
 RegisterNetEvent('qb-vehicleshop:client:openCustomFinance', function(data)
     TriggerEvent('animations:client:EmoteCommandStart', {"tablet2"})
     local dialog = exports['qb-input']:ShowInput({
-        header = getVehBrand():upper()..' '..data.vehicle:upper()..' - $'..data.price,
+        header = getVehBrand():upper()..' '..data.vehicle:upper()..' - R'..data.price,
         submitText = "Submit",
         inputs = {
             {
@@ -647,19 +665,19 @@ RegisterNetEvent('qb-vehicleshop:client:getVehicleFinance', function(data)
             isMenuHeader = true,
             icon = "fa-solid fa-sack-dollar",
             header = 'Total Balance Remaining',
-            txt = '$'..comma_value(data.balance)
+            txt = 'R'..comma_value(data.balance)..''
         },
         {
             isMenuHeader = true,
             icon = "fa-solid fa-hashtag",
             header = 'Total Payments Remaining',
-            txt = data.paymentsLeft
+            txt = ''..data.paymentsLeft..''
         },
         {
             isMenuHeader = true,
             icon = "fa-solid fa-sack-dollar",
             header = 'Recurring Payment Amount',
-            txt = '$'..comma_value(data.paymentAmount)
+            txt = 'R'..comma_value(data.paymentAmount)..''
         },
         {
             header = 'Make a payment',
@@ -698,7 +716,7 @@ RegisterNetEvent('qb-vehicleshop:client:financePayment', function(data)
                 type = 'number',
                 isRequired = true,
                 name = 'paymentAmount',
-                text = 'Payment Amount ($)'
+                text = 'Payment Amount (R)'
             }
         }
     })
@@ -737,15 +755,15 @@ CreateThread(function()
     for k, v in pairs(Config.Shops) do
         if v.showBlip then
             local Dealer = AddBlipForCoord(Config.Shops[k]["Location"])
-            SetBlipSprite (Dealer, Config.Shops[k]["blipSprite"])
+            SetBlipSprite (Dealer, 326)
             SetBlipDisplay(Dealer, 4)
-            SetBlipScale  (Dealer, 0.70)
+            SetBlipScale  (Dealer, 0.75)
             SetBlipAsShortRange(Dealer, true)
-            SetBlipColour(Dealer, Config.Shops[k]["blipColor"])
+            SetBlipColour(Dealer, 1)
             BeginTextCommandSetBlipName("STRING")
             AddTextComponentSubstringPlayerName(Config.Shops[k]["ShopLabel"])
             EndTextCommandSetBlipName(Dealer)
-        end
+	    end
     end
 end)
 
