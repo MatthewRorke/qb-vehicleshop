@@ -97,7 +97,7 @@ QBCore.Functions.CreateCallback('qb-vehicleshop:server:getVehicles', function(so
     local src = source
     local player = QBCore.Functions.GetPlayer(src)
     if player then
-        local vehicles = MySQL.Sync.fetchAll('SELECT * FROM player_vehicles WHERE citizenid = ?', {player.PlayerData.citizenid})
+        local vehicles = MySQL.Sync.fetchAll('SELECT * FROM player_vehicles WHERE citizenid = ? and (financetime > 0 or (financetime = 0 and balance = 0)) ', {player.PlayerData.citizenid})
         if vehicles[1] then
             cb(vehicles)
         end
@@ -417,22 +417,16 @@ end)
 RegisterNetEvent('qb-vehicleshop:server:checkFinance', function()
     local src = source
     local player = QBCore.Functions.GetPlayer(src)
-    local result = MySQL.Sync.fetchAll('SELECT * FROM player_vehicles WHERE citizenid = ?', {player.PlayerData.citizenid})
-    for k,v in pairs(result) do
-        if v.balance >= 1 and v.financetime < 1 then
-            paymentDue = true
-        end
-    end
-    if paymentDue then
+    local query = 'SELECT * FROM player_vehicles WHERE citizenid = ? and balance > 0 and financetime < 1'
+    local result = MySQL.Sync.fetchAll(query, {player.PlayerData.citizenid})
+    if result[1] ~= nil then
         TriggerClientEvent('QBCore:Notify', src, 'Your vehicle payment is due within '..Config.PaymentWarning..' minutes')
         Wait(Config.PaymentWarning * 60000)
-        MySQL.Sync.fetchAll('SELECT * FROM player_vehicles WHERE citizenid = ?', {player.PlayerData.citizenid}, function(vehicles)
+        MySQL.Sync.fetchAll(query, {player.PlayerData.citizenid}, function(vehicles)
             for k,v in pairs(vehicles) do
-                if v.balance >= 1 and v.financetime < 1 then
-                    local plate = v.plate
-                    MySQL.Async.execute('DELETE FROM player_vehicles WHERE plate = @plate', {['@plate'] = plate})
-                    TriggerClientEvent('QBCore:Notify', src, 'Your vehicle with plate '..plate..' has been repossessed', 'error')
-                end
+                local plate = v.plate
+                MySQL.Async.execute('DELETE FROM player_vehicles WHERE plate = @plate', {['@plate'] = plate})
+                TriggerClientEvent('QBCore:Notify', src, 'Your vehicle with plate '..plate..' has been repossessed', 'error')
             end
         end)
     end
